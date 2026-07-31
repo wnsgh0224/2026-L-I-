@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<html lang="ko">
+
+<head>
+  <!-- 한글이 깨지지 않도록 설정합니다. -->
+  <meta charset="UTF-8">
+
+  <!-- 스마트폰이나 태블릿에서도 화면이 맞게 표시되도록 합니다. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+  <!-- 오페라 브라우저 탭에 표시되는 사이트 이름입니다. -->
+  <title>수색 드론 통합 현황판</title>
+
+  <style>
+    /* ==================================================
+       이곳은 사이트 디자인을 담당하는 CSS 영역입니다.
+       지금은 내용을 이해하지 않아도 됩니다.
+       그대로 사용하면 됩니다.
+       ================================================== */
+
+    /* 모든 요소의 크기 계산 방식을 통일합니다. */
+    * {
+      box-sizing: border-box;
+    }
+
+    /* 웹페이지 전체 디자인입니다. */
+    body {
+      margin: 0;
+      min-height: 100vh;
+      font-family: Arial, "Malgun Gothic", sans-serif;
+      background-color: #0b1220;
+      color: #e5e7eb;
+    }
+
+    /* 사이트 위쪽 제목 영역입니다. */
+    header {
+      padding: 28px 20px;
+      background-color: #111c30;
+      border-bottom: 1px solid #2b3a55;
+    }
+
+    header h1 {
+      margin: 0 0 10px;
+      font-size: 30px;
+    }
+
+    header p {
+      margin: 0;
+      color: #9ca3af;
+    }
+
+    /* 전체 콘텐츠가 너무 넓어지지 않도록 제한합니다. */
+    main {
+      width: min(1200px, 92%);
+      margin: 30px auto;
+    }
+
+    /* 가장 위쪽 요약 카드들을 배치합니다. */
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 18px;
+      margin-bottom: 30px;
+    }
+
+    /* 요약 카드 한 개의 모양입니다. */
+    .summary-card {
+      padding: 22px;
+      background-color: #162238;
+      border: 1px solid #2b3a55;
+      border-radius: 14px;
+    }
+
+    .summary-card .label {
+      margin-bottom: 10px;
+      color: #9ca3af;
+      font-size: 15px;
+    }
+
+    .summary-card .number {
+      font-size: 32px;
+      font-weight: bold;
+    }
+
+    /* 출격 중인 드론 숫자의 강조 색상입니다. */
+    .active-number {
+      color: #38bdf8;
+    }
+
+    /* 대기 중인 드론 숫자의 강조 색상입니다. */
+    .standby-number {
+      color: #34d399;
+    }
+
+    /* 열원 숫자의 강조 색상입니다. */
+    .heat-number {
+      color: #fb923c;
+    }
+
+    /* 현재 시각의 강조 색상입니다. */
+    .time-number {
+      color: #c4b5fd;
+      font-size: 22px !important;
+    }
+
+    /* 각 구역의 제목입니다. */
+    .section-title {
+      margin: 32px 0 16px;
+      font-size: 22px;
+    }
+
+    /* 드론 카드들을 배치합니다. */
+    .drone-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 18px;
+    }
+
+    /* 드론 한 대의 상태를 나타내는 카드입니다. */
+    .drone-card {
+      padding: 22px;
+      background-color: #162238;
+      border: 1px solid #2b3a55;
+      border-radius: 14px;
+    }
+
+    /* 출격 중인 드론 카드는 왼쪽에 파란색 선을 표시합니다. */
+    .drone-card.active {
+      border-left: 5px solid #38bdf8;
+    }
+
+    /* 대기 중인 드론 카드는 왼쪽에 초록색 선을 표시합니다. */
+    .drone-card.standby {
+      border-left: 5px solid #34d399;
+    }
+
+    .drone-card h3 {
+      margin: 0;
+      font-size: 21px;
+    }
+
+    /* 드론 이름과 상태 표시를 한 줄에 배치합니다. */
+    .drone-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+
+    /* 출격 중, 대기 중 등의 상태 표시입니다. */
+    .status {
+      padding: 7px 11px;
+      border-radius: 20px;
+      font-size: 14px;
+      font-weight: bold;
+    }
+
+    .status.active {
+      background-color: rgba(56, 189, 248, 0.15);
+      color: #7dd3fc;
+    }
+
+    .status.returning {
+      background-color: rgba(251, 146, 60, 0.15);
+      color: #fdba74;
+    }
+
+    .status.standby {
+      background-color: rgba(52, 211, 153, 0.15);
+      color: #6ee7b7;
+    }
+
+    .info-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 15px;
+      margin: 13px 0;
+      color: #cbd5e1;
+    }
+
+    .info-value {
+      color: white;
+      font-weight: bold;
+      text-align: right;
+    }
+
+    /* 배터리 잔량 막대의 바깥 부분입니다. */
+    .battery-bar {
+      height: 14px;
+      margin-top: 8px;
+      overflow: hidden;
+      background-color: #344155;
+      border-radius: 10px;
+    }
+
+    /* 배터리 잔량 막대의 안쪽 색상 부분입니다. */
+    .battery-fill {
+      height: 100%;
+      background-color: #22c55e;
+      border-radius: 10px;
+    }
+
+    /* 배터리가 40% 이하이면 노란색으로 표시합니다. */
+    .battery-fill.warning {
+      background-color: #f59e0b;
+    }
+
+    /* 배터리가 20% 이하이면 빨간색으로 표시합니다. */
+    .battery-fill.danger {
+      background-color: #ef4444;
+    }
+
+    /* 아래쪽 안내 문구입니다. */
+    .notice {
+      margin-top: 30px;
+      padding: 16px 18px;
+      background-color: #111c30;
+      border: 1px solid #2b3a55;
+      border-radius: 12px;
+      color: #9ca3af;
+      line-height: 1.7;
+    }
+
+    /* 화면이 좁을 때 한 줄에 카드 하나씩 표시합니다. */
+    @media (max-width: 800px) {
+      .summary-grid,
+      .drone-grid {
+        grid-template-columns: 1fr;
+      }
+
+      header h1 {
+        font-size: 24px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+  <!-- ==================================================
+       사이트 위쪽 제목
+       ================================================== -->
+  <header>
+    <h1>수색 드론 통합 현황판</h1>
+    <p>출격 상태, 배터리 잔량 및 열원 탐지 현황</p>
+  </header>
+
+  <main>
+
+    <!-- ==================================================
+         전체 현황 요약
+         ================================================== -->
+    <section class="summary-grid">
+
+      <div class="summary-card">
+        <div class="label">현재 출격 중</div>
+
+        <!-- JavaScript가 출격 중인 드론 수를 자동으로 넣습니다. -->
+        <div class="number active-number" id="activeDroneCount">0대</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="label">출격하지 않은 드론</div>
+
+        <!-- JavaScript가 대기 중인 드론 수를 자동으로 넣습니다. -->
+        <div class="number standby-number" id="standbyDroneCount">0대</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="label">탐지된 열원 총합</div>
+
+        <!-- JavaScript가 열원 총개수를 자동으로 계산합니다. -->
+        <div class="number heat-number" id="totalHeatCount">0개</div>
+      </div>
+
+      <div class="summary-card">
+        <div class="label">현황판 확인 시각</div>
+
+        <!-- 현재 시각이 자동으로 표시됩니다. -->
+        <div class="number time-number" id="currentTime">--:--:--</div>
+      </div>
+
+    </section>
+
+    <!-- 출격 중인 드론이 표시되는 영역입니다. -->
+    <h2 class="section-title">출격 중인 드론 현황</h2>
+    <section class="drone-grid" id="activeDroneList"></section>
+
+    <!-- 출격하지 않은 드론이 표시되는 영역입니다. -->
+    <h2 class="section-title">출격하지 않은 드론 현황</h2>
+    <section class="drone-grid" id="standbyDroneList"></section>
+
+    <div class="notice">
+      현재 화면은 실제 드론과 연결되지 않은 시연용 현황판입니다.
+      아래 JavaScript의 드론 데이터를 수정하면 화면에 표시되는 상태,
+      배터리 잔량 및 열원 탐지 수가 자동으로 변경됩니다.
+    </div>
+
+  </main>
+
+  <script>
+    /* ==================================================
+       이곳은 사이트 기능을 담당하는 JavaScript 영역입니다.
+
+       지금은 아래 droneData의 숫자와 글자만 수정하면 됩니다.
+       나중에는 실제 드론이 보내는 데이터로 교체할 수 있습니다.
+       ================================================== */
+
+
+    /* --------------------------------------------------
+       드론 정보 입력 부분
+
+       id:
+       드론 번호
+
+       name:
+       화면에 표시할 드론 이름
+
+       status:
+       "ON_MISSION" = 출격하여 수색 중
+       "RETURNING"  = 출격 후 복귀 중
+       "STANDBY"    = 출격하지 않고 대기 중
+
+       battery:
+       배터리 잔량
+
+       heatSources:
+       해당 드론이 탐지한 열원 개수
+
+       mission:
+       드론이 수행 중인 임무 또는 현재 위치
+       -------------------------------------------------- */
+
+    const droneData = [
+      {
+        id: 1,
+        name: "수색 드론 1호기",
+        status: "ON_MISSION",
+        battery: 76,
+        heatSources: 3,
+        mission: "A구역 수색 중"
+      },
+      {
+        id: 2,
+        name: "수색 드론 2호기",
+        status: "RETURNING",
+        battery: 18,
+        heatSources: 1,
+        mission: "충전소로 복귀 중"
+      },
+      {
+        id: 3,
+        name: "수색 드론 3호기",
+        status: "STANDBY",
+        battery: 100,
+        heatSources: 0,
+        mission: "충전 완료 및 출격 대기"
+      },
+      {
+        id: 4,
+        name: "수색 드론 4호기",
+        status: "STANDBY",
+        battery: 64,
+        heatSources: 0,
+        mission: "충전 중"
+      }
+    ];
+
+
+    /* 상태 코드를 사람이 읽기 쉬운 한글로 바꿉니다. */
+    function getStatusName(status) {
+      if (status === "ON_MISSION") {
+        return "수색 중";
+      }
+
+      if (status === "RETURNING") {
+        return "복귀 중";
+      }
+
+      return "대기 중";
+    }
+
+
+    /* 상태에 맞는 CSS 이름을 선택합니다. */
+    function getStatusClass(status) {
+      if (status === "ON_MISSION") {
+        return "active";
+      }
+
+      if (status === "RETURNING") {
+        return "returning";
+      }
+
+      return "standby";
+    }
+
+
+    /* 배터리 잔량에 따라 막대 색상을 선택합니다. */
+    function getBatteryClass(battery) {
+      if (battery <= 20) {
+        return "danger";
+      }
+
+      if (battery <= 40) {
+        return "warning";
+      }
+
+      return "";
+    }
+
+
+    /* 드론 카드 한 개를 만드는 함수입니다. */
+    function createDroneCard(drone) {
+
+      /* STANDBY가 아니면 출격한 드론으로 판단합니다. */
+      const isActive = drone.status !== "STANDBY";
+
+      /* 카드의 왼쪽 선 색상을 결정합니다. */
+      const cardClass = isActive ? "active" : "standby";
+
+      /* 아래 HTML 모양으로 드론 카드를 만들어 반환합니다. */
+      return `
+        <article class="drone-card ${cardClass}">
+
+          <div class="drone-header">
+            <h3>${drone.name}</h3>
+
+            <span class="status ${getStatusClass(drone.status)}">
+              ${getStatusName(drone.status)}
+            </span>
+          </div>
+
+          <div class="info-row">
+            <span>현재 임무</span>
+            <span class="info-value">${drone.mission}</span>
+          </div>
+
+          <div class="info-row">
+            <span>배터리 잔량</span>
+            <span class="info-value">${drone.battery}%</span>
+          </div>
+
+          <div class="battery-bar">
+            <div
+              class="battery-fill ${getBatteryClass(drone.battery)}"
+              style="width: ${drone.battery}%;">
+            </div>
+          </div>
+
+          <div class="info-row">
+            <span>탐지한 열원</span>
+            <span class="info-value">${drone.heatSources}개</span>
+          </div>
+
+        </article>
+      `;
+    }
+
+
+    /* 모든 드론 정보를 화면에 표시하는 함수입니다. */
+    function displayDroneData() {
+
+      /* 출격 중이거나 복귀 중인 드론만 선택합니다. */
+      const activeDrones = droneData.filter(function(drone) {
+        return drone.status !== "STANDBY";
+      });
+
+      /* 대기 중인 드론만 선택합니다. */
+      const standbyDrones = droneData.filter(function(drone) {
+        return drone.status === "STANDBY";
+      });
+
+      /* 출격한 드론이 탐지한 열원 개수를 모두 더합니다. */
+      const totalHeatSources = activeDrones.reduce(function(total, drone) {
+        return total + drone.heatSources;
+      }, 0);
+
+      /* 위쪽 요약 숫자를 화면에 넣습니다. */
+      document.getElementById("activeDroneCount").textContent =
+        activeDrones.length + "대";
+
+      document.getElementById("standbyDroneCount").textContent =
+        standbyDrones.length + "대";
+
+      document.getElementById("totalHeatCount").textContent =
+        totalHeatSources + "개";
+
+      /* 출격 중인 드론 카드를 화면에 넣습니다. */
+      document.getElementById("activeDroneList").innerHTML =
+        activeDrones.map(createDroneCard).join("");
+
+      /* 출격하지 않은 드론 카드를 화면에 넣습니다. */
+      document.getElementById("standbyDroneList").innerHTML =
+        standbyDrones.map(createDroneCard).join("");
+    }
+
+
+    /* 현재 시각을 표시하는 함수입니다. */
+    function updateCurrentTime() {
+      const now = new Date();
+
+      document.getElementById("currentTime").textContent =
+        now.toLocaleTimeString("ko-KR");
+    }
+
+
+    /* 사이트가 열리면 드론 정보를 화면에 표시합니다. */
+    displayDroneData();
+
+    /* 사이트가 열리면 현재 시각을 표시합니다. */
+    updateCurrentTime();
+
+    /* 1초마다 현재 시각을 다시 표시합니다. */
+    setInterval(updateCurrentTime, 1000);
+  </script>
+
+</body>
+
+</html>
