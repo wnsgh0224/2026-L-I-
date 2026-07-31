@@ -1,0 +1,402 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ANU 전술 구조 관제망 v3.1</title>
+  
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+  <style>
+    html, body { margin: 0; padding: 0; height: 100%; }
+    * { box-sizing: border-box; font-family: 'Pretendard', sans-serif; user-select: none; }
+    body { background-color: #020617; color: #f8fafc; display: flex; overflow: hidden; }
+
+    /* 사이드바 */
+    aside { width: 360px; background-color: #0f172a; border-right: 1px solid #1e293b; display: flex; flex-direction: column; z-index: 1000; box-shadow: 2px 0 15px rgba(0,0,0,0.6); flex-shrink: 0; }
+    .header { padding: 15px 20px; border-bottom: 1px solid #1e293b; background: #020617; }
+    .header h1 { font-size: 16px; color: #38bdf8; display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
+    
+    .panel { padding: 15px; border-bottom: 1px solid #1e293b; }
+    .panel-title { font-size: 11px; color: #94a3b8; font-weight: bold; margin-bottom: 8px; text-transform: uppercase; }
+    
+    .btn-group { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-bottom: 8px; }
+    .btn { width: 100%; padding: 10px; border: none; border-radius: 6px; font-weight: bold; font-size: 12px; cursor: pointer; color: white; transition: 0.2s; }
+    .btn.full { grid-column: span 2; }
+    .btn-mode { background-color: #334155; border: 1px solid #475569; }
+    .btn-mode.active { background-color: #0284c7; border-color: #0369a1; box-shadow: 0 0 12px rgba(2, 132, 199, 0.4); }
+    .btn-action { background-color: #059669; }
+    .btn-action:hover { background-color: #10b981; }
+    .btn-report { background-color: #ea580c; }
+    .btn-danger { background-color: #be123c; }
+
+    /* 비상 조치 패널 */
+    #emergency-panel { display: none; background: rgba(153, 27, 27, 0.2); border: 1px solid #ef4444; border-radius: 6px; padding: 10px; margin-bottom: 10px; }
+    .btn-tactical { background-color: #4f46e5; margin-top: 5px; }
+
+    /* 텔레메트리 */
+    .tele-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .tele-box { background: #020617; padding: 8px; border-radius: 6px; border: 1px solid #1e293b; }
+    .tele-title { font-size: 10px; color: #64748b; display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .bat-bar { height: 4px; background: #334155; border-radius: 2px; overflow: hidden; }
+    .bat-fill { height: 100%; background: #10b981; width: 100%; transition: width 0.3s; }
+
+    /* 로그 */
+    .log-box { flex: 1; padding: 15px; overflow-y: auto; background: #020617; font-size: 11px; color: #cbd5e1; }
+    .log-item { margin-bottom: 6px; line-height: 1.4; border-left: 2px solid #334155; padding-left: 8px; }
+    .log-time { color: #64748b; margin-right: 5px; }
+    .log-important { border-left-color: #ea580c; color: #fb923c; }
+
+    /* 메인 맵 */
+    main { flex: 1; position: relative; height: 100%; display: flex; flex-direction: column; }
+    #map { flex: 1; background-color: #000; }
+
+    /* 알림 오버레이 */
+    #alert-overlay { position: absolute; top: 30px; left: 50%; transform: translateX(-50%); background: rgba(2, 6, 23, 0.95); border: 2px solid #ef4444; padding: 20px; border-radius: 8px; text-align: center; display: none; z-index: 2000; box-shadow: 0 10px 30px rgba(0,0,0,0.5); backdrop-filter: blur(5px); }
+    #alert-overlay h2 { color: #ef4444; font-size: 18px; margin-bottom: 5px; animation: blink 1s infinite; }
+    @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.4; } }
+
+    /* 마커 커스텀 */
+    .base-marker { background: #0284c7; color: white; border: 2px solid white; border-radius: 50%; text-align: center; line-height: 24px; font-weight: bold; }
+    .mother-marker { background: #0ea5e9; border: 2px solid white; border-radius: 4px; box-shadow: 0 0 15px #0ea5e9; }
+    .child-marker { border: 2px solid white; border-radius: 50%; width: 12px !important; height: 12px !important; margin-left: -6px !important; margin-top: -6px !important; }
+    .c1 { background: #10b981; } .c2 { background: #f59e0b; } .c3 { background: #3b82f6; } .c4 { background: #d946ef; }
+  </style>
+</head>
+<body>
+
+  <aside>
+    <div class="header">
+      <h1>🚁 ANU 구조 전술 지휘망</h1>
+      <span style="font-size: 10px; color: #64748b;">4기 편대 운용 / 비상 전술 통제 시스템</span>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">1. 구조 요청 접수</div>
+      <button id="btn-generate-report" class="btn btn-report">🚨 무작위 실종 신고 생성</button>
+    </div>
+
+    <div class="panel">
+      <div class="panel-title">2. 전술 맵핑 (지도 클릭)</div>
+      <div class="btn-group">
+        <button id="btn-mode-target" class="btn btn-mode active">📍 모선 투입점</button>
+        <button id="btn-mode-route" class="btn btn-mode">🚩 수색 경로(WP)</button>
+      </div>
+      <button id="btn-deploy" class="btn btn-action full">🚀 전체 편대 출동 (모선+4기)</button>
+    </div>
+
+    <div class="panel" id="emergency-panel">
+      <div class="panel-title" style="color: #fca5a5;">⚠️ 요구조자 발견: 후속 전술 지시</div>
+      <button id="btn-tactical-path" class="btn btn-tactical full">🛡️ 지상 구조대 진입 동선 확보</button>
+      <button id="btn-tactical-guard" class="btn btn-tactical full">👁️ 4기 교대 감시 (배터리 로테이션)</button>
+      <button id="btn-return-all" class="btn btn-danger full">상황 종료 (전체 귀환)</button>
+    </div>
+
+    <div class="panel" style="padding-bottom: 10px;">
+      <div class="tele-box" style="margin-bottom: 8px;">
+        <div class="tele-title"><span>[M] 모선 (전진 기지)</span> <span id="bat-m-text">100%</span></div>
+        <div class="bat-bar"><div id="bat-m" class="bat-fill" style="background:#0ea5e9;"></div></div>
+      </div>
+      
+      <div class="tele-grid">
+        <div class="tele-box">
+          <div class="tele-title"><span>[C1] 알파</span> <span id="bat-c1-text">100%</span></div>
+          <div class="bat-bar"><div id="bat-c1" class="bat-fill"></div></div>
+        </div>
+        <div class="tele-box">
+          <div class="tele-title"><span>[C2] 브라보</span> <span id="bat-c2-text">100%</span></div>
+          <div class="bat-bar"><div id="bat-c2" class="bat-fill" style="background:#f59e0b;"></div></div>
+        </div>
+        <div class="tele-box">
+          <div class="tele-title"><span>[C3] 찰리</span> <span id="bat-c3-text">100%</span></div>
+          <div class="bat-bar"><div id="bat-c3" class="bat-fill" style="background:#3b82f6;"></div></div>
+        </div>
+        <div class="tele-box">
+          <div class="tele-title"><span>[C4] 델타</span> <span id="bat-c4-text">100%</span></div>
+          <div class="bat-bar"><div id="bat-c4" class="bat-fill" style="background:#d946ef;"></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="log-box" id="log-box">
+      <div class="log-item"><span class="log-time">[시스템]</span> 자교 드론 4기 통제망 초기화 완료. 대기 중입니다.</div>
+    </div>
+  </aside>
+
+  <main>
+    <div id="map"></div>
+    <div id="alert-overlay">
+      <h2>🚨 요구조자 발견!</h2>
+      <p style="font-size:12px; color:#94a3b8;">나머지 기체는 모선으로 자동 복귀합니다.</p>
+      <p style="font-size:13px; font-weight:bold; color:white; margin-top:8px;">좌측 패널에서 후속 전술을 선택하세요.</p>
+    </div>
+  </main>
+
+  <script>
+    // 브라우저 요소가 100% 로드된 후 실행 (충돌 및 먹통 방지)
+    window.addEventListener('DOMContentLoaded', () => {
+      
+      // 1. 지도 초기화 (동아마이스터고 좌표)
+      const baseLatLng = [36.3436, 127.4542];
+      const map = L.map('map', { zoomControl: false }).setView(baseLatLng, 13);
+      L.control.zoom({ position: 'bottomright' }).addTo(map);
+
+      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+        attribution: '© OpenStreetMap | ANU System'
+      }).addTo(map);
+
+      // 💥 지도 화면 먹통/깨짐 완전 방지용 리사이즈 강제 갱신
+      setTimeout(() => { map.invalidateSize(); }, 300);
+
+      // 로그 함수
+      function addLog(msg, important = false) {
+        const logBox = document.getElementById('log-box');
+        const time = new Date().toLocaleTimeString('ko-KR');
+        const div = document.createElement('div');
+        div.className = 'log-item' + (important ? ' log-important' : '');
+        div.innerHTML = `<span class="log-time">[${time}]</span> ${msg}`;
+        logBox.appendChild(div);
+        logBox.scrollTop = logBox.scrollHeight;
+      }
+
+      // 2. 데이터 모델 세팅 (변수명 충돌 완벽 회피)
+      let inputMode = 'target';
+      let motherShip = { lat: baseLatLng[0], lng: baseLatLng[1], bat: 100, state: 'idle', target: null };
+      
+      let droneSquad = [
+        { id: 1, name: '알파', code: 'c1', lat: baseLatLng[0], lng: baseLatLng[1], bat: 100, state: 'docked', idx: 0 },
+        { id: 2, name: '브라보', code: 'c2', lat: baseLatLng[0], lng: baseLatLng[1], bat: 100, state: 'docked', idx: 0 },
+        { id: 3, name: '찰리', code: 'c3', lat: baseLatLng[0], lng: baseLatLng[1], bat: 100, state: 'docked', idx: 0 },
+        { id: 4, name: '델타', code: 'c4', lat: baseLatLng[0], lng: baseLatLng[1], bat: 100, state: 'docked', idx: 0 }
+      ];
+      let waypoints = [];
+      let victim = null; 
+      let searchZone = null;
+      let finderDroneId = null;
+      let tacticalMode = 'normal';
+
+      // 3. 마커 생성
+      L.marker(baseLatLng, { icon: L.divIcon({ className: 'base-marker', html: '🏫', iconSize:[24,24] }) }).addTo(map);
+      let motherMarker = L.marker(baseLatLng, { icon: L.divIcon({ className: 'mother-marker', iconSize:[16,16] }) }).addTo(map);
+      
+      let childMarkers = droneSquad.map(c => 
+        L.marker(baseLatLng, { icon: L.divIcon({ className: 'child-marker ' + c.code }), opacity: 0 }).addTo(map)
+      );
+      
+      let targetMarker = null;
+      let routeLine = L.polyline([], { color: '#f59e0b', weight: 2, dashArray: '5,5' }).addTo(map);
+
+      // 4. 이벤트 연결 (클릭 먹통 방지를 위해 ID로 직접 제어)
+      document.getElementById('btn-generate-report').addEventListener('click', () => {
+        if(searchZone) map.removeLayer(searchZone);
+        tacticalMode = 'normal';
+        document.getElementById('emergency-panel').style.display = 'none';
+        
+        const rLat = baseLatLng[0] + (Math.random() - 0.5) * 0.04;
+        const rLng = baseLatLng[1] + (Math.random() - 0.5) * 0.04;
+        
+        searchZone = L.circle([rLat, rLng], { radius: 800, color: '#ea580c', fillOpacity: 0.2 }).addTo(map);
+        victim = { lat: rLat + (Math.random()-0.5)*0.008, lng: rLng + (Math.random()-0.5)*0.008, found: false };
+        
+        map.flyTo([rLat, rLng], 14);
+        addLog("🚨 실종 신고 접수! 수색 예상 구역이 맵에 표시되었습니다.", true);
+      });
+
+      map.on('click', (e) => {
+        if(inputMode === 'target') {
+          if(targetMarker) map.removeLayer(targetMarker);
+          targetMarker = L.marker(e.latlng).addTo(map);
+          motherShip.target = e.latlng;
+          addLog("📍 모선 전진 배치 지점 설정");
+        } else {
+          waypoints.push(e.latlng);
+          routeLine.addLatLng(e.latlng);
+          L.circleMarker(e.latlng, { radius: 3, color: '#f59e0b' }).addTo(map);
+          addLog(`🚩 웨이포인트 추가 (${waypoints.length})`);
+        }
+      });
+
+      document.getElementById('btn-mode-target').addEventListener('click', () => { 
+        inputMode = 'target'; 
+        document.getElementById('btn-mode-target').classList.add('active'); 
+        document.getElementById('btn-mode-route').classList.remove('active'); 
+      });
+      
+      document.getElementById('btn-mode-route').addEventListener('click', () => { 
+        inputMode = 'route'; 
+        document.getElementById('btn-mode-route').classList.add('active'); 
+        document.getElementById('btn-mode-target').classList.remove('active'); 
+      });
+
+      document.getElementById('btn-deploy').addEventListener('click', () => {
+        if(!motherShip.target) return alert('모선 투입 지점을 지도에 찍어주세요.');
+        if(waypoints.length < 4) return alert('웨이포인트를 최소 4개 이상 찍어주세요.');
+        motherShip.state = 'moving';
+        addLog("🚀 모선 출동. 현장 도착 시 4기 편대 자율 수색을 시작합니다.");
+      });
+
+      document.getElementById('btn-tactical-path').addEventListener('click', () => {
+        tacticalMode = 'pathing';
+        addLog("🛡️ [전술 변경] 3기 편대가 구조대 진입 동선(모선~발견지점)을 확보합니다.", true);
+        document.getElementById('alert-overlay').style.display = 'none';
+      });
+
+      document.getElementById('btn-tactical-guard').addEventListener('click', () => {
+        tacticalMode = 'guarding';
+        addLog("👁️ [전술 변경] 4기 교대 감시 모드 가동. 배터리 소진 시 교대합니다.", true);
+        document.getElementById('alert-overlay').style.display = 'none';
+      });
+
+      document.getElementById('btn-return-all').addEventListener('click', () => {
+        tacticalMode = 'returning';
+        motherShip.state = 'returning';
+        droneSquad.forEach(c => c.state = 'returning');
+        document.getElementById('emergency-panel').style.display = 'none';
+        addLog("🏠 전 기체 본부 복귀 명령 하달.");
+      });
+
+      // 5. 시뮬레이션 물리 엔진
+      function moveTowards(obj, target, speed) {
+        let dLat = target.lat - obj.lat; 
+        let dLng = target.lng - obj.lng;
+        let dist = Math.sqrt(dLat*dLat + dLng*dLng);
+        if(dist < speed) { 
+          obj.lat = target.lat; obj.lng = target.lng; 
+          return true; 
+        } else { 
+          obj.lat += (dLat/dist)*speed; obj.lng += (dLng/dist)*speed; 
+          return false; 
+        }
+      }
+
+      setInterval(() => {
+        // 모선 이동
+        if(motherShip.state === 'moving') {
+          if(moveTowards(motherShip, motherShip.target, 0.0002)) {
+            motherShip.state = 'deployed';
+            addLog("✅ 모선 현장 도착. 자교 드론 4기 수색 개시.");
+            droneSquad.forEach((c, i) => {
+              c.state = 'patrolling'; 
+              c.idx = i % waypoints.length; 
+              c.lat = motherShip.lat; c.lng = motherShip.lng;
+              childMarkers[i].setOpacity(1);
+            });
+          }
+          motherShip.bat -= 0.02;
+        } 
+        else if(motherShip.state === 'returning') {
+          let reachedBase = moveTowards(motherShip, {lat: baseLatLng[0], lng: baseLatLng[1]}, 0.0002);
+          if(reachedBase) {
+            if (motherShip.bat < 100) addLog("🏠 모선 기지 복귀 완료.");
+            motherShip.state = 'idle';
+            motherShip.bat = 100;
+          } else {
+            motherShip.bat -= 0.02;
+          }
+        }
+        motherMarker.setLatLng([motherShip.lat, motherShip.lng]);
+
+        // 자교 드론 이동
+        droneSquad.forEach((c, i) => {
+          // [수색]
+          if(c.state === 'patrolling' && tacticalMode === 'normal') {
+            let wp = waypoints[c.idx];
+            if(moveTowards(c, wp, 0.0005)) c.idx = (c.idx + 1) % waypoints.length;
+            c.bat -= 0.1;
+
+            if(victim && !victim.found && map.distance([c.lat, c.lng], [victim.lat, victim.lng]) < 150) {
+              victim.found = true;
+              finderDroneId = c.id; 
+              searchZone.setStyle({ color: '#10b981', fillColor: '#10b981' });
+              L.marker([victim.lat, victim.lng]).addTo(map).bindPopup('요구조자 확인').openPopup();
+              
+              document.getElementById('alert-overlay').style.display = 'block';
+              document.getElementById('emergency-panel').style.display = 'block';
+              addLog(`🚨 [${c.name}] 요구조자 발견! 위치 고정 및 호버링 전환.`, true);
+              
+              c.state = 'guarding';
+              droneSquad.forEach(other => { 
+                if(other.id !== c.id) { 
+                  other.state = 'returning'; 
+                  addLog(`[${other.name}] 복귀 지시.`); 
+                }
+              });
+            }
+          } 
+          // [감시]
+          else if (c.state === 'guarding') {
+            moveTowards(c, victim, 0.0005); 
+            c.bat -= 0.05;
+
+            if(c.bat < 20 && tacticalMode === 'guarding') {
+              c.state = 'returning';
+              addLog(`⚠️ [${c.name}] 배터리 부족. 교대 복귀.`);
+              let bestDrone = droneSquad.filter(d => d.state === 'docked').sort((a,b) => b.bat - a.bat)[0];
+              if(bestDrone) {
+                bestDrone.state = 'guarding';
+                childMarkers[bestDrone.id-1].setOpacity(1);
+                addLog(`🛸 [${bestDrone.name}] 감시 임무 인계 및 출격.`);
+              }
+            }
+          }
+          // [진입 동선]
+          else if (tacticalMode === 'pathing' && c.id !== finderDroneId) {
+            if(c.bat > 20) {
+              c.state = 'pathing';
+              childMarkers[i].setOpacity(1);
+              let ratio = (c.id > finderDroneId ? c.id - 1 : c.id) / 3.0; 
+              let targetPos = {
+                lat: motherShip.lat + (victim.lat - motherShip.lat) * ratio,
+                lng: motherShip.lng + (victim.lng - motherShip.lng) * ratio
+              };
+              moveTowards(c, targetPos, 0.0005);
+              c.bat -= 0.05;
+            } else {
+              c.state = 'returning'; 
+            }
+          }
+          // [복귀]
+          else if(c.state === 'returning') {
+            if(moveTowards(c, motherShip, 0.0005)) {
+              c.state = 'docked';
+              childMarkers[i].setOpacity(0);
+            }
+            c.bat -= 0.05;
+          } 
+          // [도킹 및 충전]
+          else if(c.state === 'docked') {
+            c.lat = motherShip.lat; c.lng = motherShip.lng;
+            if(c.bat < 100) c.bat += 0.5; 
+          }
+
+          // 강제 복귀
+          if(c.bat < 20 && c.state !== 'returning' && c.state !== 'docked') {
+            c.state = 'returning';
+            addLog(`⚠️ [${c.name}] 배터리 한계. 강제 복귀.`);
+          }
+
+          childMarkers[i].setLatLng([c.lat, c.lng]);
+          
+          // UI 갱신 (오류 차단)
+          let batVal = Math.max(0, c.bat);
+          document.getElementById('bat-c' + c.id + '-text').innerText = batVal.toFixed(0) + '%';
+          let bar = document.getElementById('bat-c' + c.id);
+          bar.style.width = batVal + '%';
+          if(c.state === 'returning' || batVal < 20) {
+            bar.style.backgroundColor = '#ef4444';
+          } else {
+            bar.style.backgroundColor = (c.id===1?'#10b981':c.id===2?'#f59e0b':c.id===3?'#3b82f6':'#d946ef');
+          }
+        });
+
+        // 모선 배터리 UI
+        let mBatVal = Math.max(0, motherShip.bat);
+        document.getElementById('bat-m-text').innerText = mBatVal.toFixed(0) + '%';
+        document.getElementById('bat-m').style.width = mBatVal + '%';
+
+      }, 50);
+    });
+  </script>
+</body>
+</html>
