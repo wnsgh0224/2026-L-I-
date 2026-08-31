@@ -466,5 +466,28 @@ void executeMission() {
     default:
       // 제자리 비행 (Hovering) 또는 대기
       break;
+
+
+// 기존 탐색 함수들
+void flyCirclePattern() {
+  // 원형 탐색 비행 제어 코드 작성
+}
+
+void flySectorPattern() {
+  // 부채꼴 탐색 비행 제어 코드 작성
+}
+
+void flyCustomWaypoints() {
+  // 커스텀 웨이포인트 비행 제어 코드 작성
+}
+
+// 신규 추가: 원형 산개 제어 함수 (3번 입력 시 실행)
+void flyCircularDispersion() {
+  // TODO: 4기 편대가 중심점에서 360도를 균등하게 나누어(예: 0°, 90°, 180°, 270°) 방사형으로 퍼져나가는 로직 구현
+}
+
+// 신규 추가: 부채꼴 산개 제어 함수 (4번 입력 시 실행)
+void flySectorDispersion() {
+  // TODO: 전방 특정 시야각 범위 내에서 부채꼴 모양으로 간격을 두고 펼쳐지는 로직 구현
   }
 }
