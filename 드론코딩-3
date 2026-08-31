@@ -222,4 +222,4 @@ void flyCircularDispersion() {
 
 // 신규 추가: 부채꼴 산개 제어 함수 (4번 입력 시 실행)
 void flySectorDispersion() {
-  // TODO: 전방 특정 시야각 범위 내에서 부채꼴 모양으로 간격을 두고 펼쳐지는 로직 구현
+  // TODO: 전방 특정 시야각 범위 내에서 부채꼴 모양으로 간격을 두고 펼쳐지는 로직 구현gka 
