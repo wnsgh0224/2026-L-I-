@@ -1,0 +1,225 @@
+#include <TinyGPS++.h>
+#include <SoftwareSerial.h>
+
+// 통신 및 GPS 설정 (예: XBee 통신 모듈, GPS 모듈)
+SoftwareSerial Radio(10, 11); // RX, TX (다른 드론과 통신)
+SoftwareSerial GPS_Serial(4, 5); // RX, TX (GPS)
+TinyGPSPlus gps;
+
+// 핀 설정
+const int BATTERY_PIN = A0;
+const float LOW_BATTERY_THRESHOLD = 20.0; // 배터리 20% 이하일 때 복귀
+
+// 충전소(Box) GPS 좌표
+const float BOX_LAT = 36.3504; // 예시 위도
+const float BOX_LON = 127.3845; // 예시 경도
+
+// 드론 상태 정의
+enum DroneState {
+  STANDBY,       // 박스에서 대기 중 (충전 중)
+  ON_MISSION,    // 임무 수행 중 (비행 중)
+  RETURNING      // 배터리 부족으로 복귀 중
+};
+
+DroneState currentState = STANDBY; // 초기 상태 설정 (필요에 따라 변경)
+
+// 현재 위치 저장용 변수
+float currentLat = 0.0;
+float currentLon = 0.0;
+
+void setup() {
+  Serial.begin(9600);
+  Radio.begin(9600);
+  GPS_Serial.begin(9600);
+ 
+  Serial.println("드론 시스템 초기화 완료");
+}
+
+void loop() {
+  // 1. GPS 위치 업데이트
+  while (GPS_Serial.available() > 0) {
+    gps.encode(GPS_Serial.read());
+    if (gps.location.isUpdated()) {
+      currentLat = gps.location.lat();
+      currentLon = gps.location.lng();
+    }
+  }
+
+  // 2. 배터리 잔량 확인 (전압 분배 회로 사용 가정)
+  int sensorValue = analogRead(BATTERY_PIN);
+  float voltage = sensorValue * (5.0 / 1023.0);
+  float batteryPercent = map(voltage, 3.2, 4.2, 0, 100); // 1셀 LiPo 기준 예시
+
+  // 3. 상태에 따른 행동 로직 (State Machine)
+  switch (currentState) {
+   
+    case ON_MISSION:
+      // 배터리가 떨어지면 교대 요청 후 복귀
+      if (batteryPercent <= LOW_BATTERY_THRESHOLD) {
+        Serial.println("경고: 배터리 부족! 교대 드론 호출...");
+       
+        // 대기 중인 드론에게 현재 위치 전송 ("REPLACE,위도,경도")
+        Radio.print("REPLACE,");
+        Radio.print(currentLat, 6);
+        Radio.print(",");
+        Radio.println(currentLon, 6);
+       
+        currentState = RETURNING;
+      }
+      break;
+
+    case RETURNING:
+      // 충전소(Box)로 이동하는 로직 (실제로는 MAVLink 등을 통해 비행 컨트롤러에 명령 전달)
+      flyTo(BOX_LAT, BOX_LON);
+     
+      // 박스에 도착하면 상태를 대기(충전)로 변경
+      if (isArrived(BOX_LAT, BOX_LON)) {
+        currentState = STANDBY;
+        Serial.println("충전소 도착. 충전 시작 및 대기 모드 전환.");
+      }
+      break;
+
+    case STANDBY:
+      // 무전기로부터 교대 요청(REPLACE) 신호가 오는지 확인
+      if (Radio.available()) {
+        String msg = Radio.readStringUntil('\n');
+       
+        if (msg.startsWith("REPLACE")) {
+          // 메시지 파싱하여 목표 위치 추출
+          int firstComma = msg.indexOf(',');
+          int secondComma = msg.indexOf(',', firstComma + 1);
+         
+          float targetLat = msg.substring(firstComma + 1, secondComma).toFloat();
+          float targetLon = msg.substring(secondComma + 1).toFloat();
+         
+          Serial.println("교대 요청 수신! 해당 위치로 출동합니다.");
+         
+          // 목표 위치로 비행 후 임무 상태로 전환
+          flyTo(targetLat, targetLon);
+          currentState = ON_MISSION;
+        }
+      }
+      break;
+  }
+}
+
+// 특정 좌표로 이동하는 가짜 함수 (실제로는 비행 컨트롤러 제어 코드 필요)
+void flyTo(float targetLat, float targetLon) {
+  Serial.print("목표 지점으로 비행 중: ");
+  Serial.print(targetLat);
+  Serial.print(", ");
+  Serial.println(targetLon);
+  // 이곳에 모터 제어나 FC 명령 코드 추가
+}
+
+// 목적지에 도착했는지 확인하는 함수 (오차 범위 내 접근 확인)
+bool isArrived(float targetLat, float targetLon) {
+  // 실제로는 Haversine 공식 등을 사용해 거리를 계산하여 판단합니다.
+  return false; // 테스트용
+}
+
+
+
+
+
+
+
+
+
+
+
+#include <Arduino.h>
+#include <math.h>
+
+// 드론 고유 정보
+const int DRONE_ID = 0;       // 드론 A는 0, 드론 B는 1 (총 2대 예시)
+const int TOTAL_DRONES = 2;   // 전체 드론 수
+
+// 충전소(기준점) 위치
+const double BASE_LAT = 36.3504;
+const double BASE_LON = 127.3845;
+
+// 부채꼴 정찰 설정
+const double SEARCH_RADIUS = 500.0; // 탐색 거리 (500미터)
+const double CENTER_BEARING = 0.0;  // 정찰 중심 방향 (0도 = 북쪽, 90도 = 동쪽)
+const double FAN_ANGLE = 90.0;       // 부채꼴 펼침 각도 (90도 폭)
+
+// 목표 좌표 저장 변수
+double targetLat = 0.0;
+double targetLon = 0.0;
+
+// degree -> radian 변환
+double deg2rad(double deg) {
+  return deg * (M_PI / 180.0);
+}
+
+// 부채꼴 목적지 좌표 계산 함수
+void calculateFanTarget(int droneIndex, int totalDrones) {
+  double startAngle = CENTER_BEARING - (FAN_ANGLE / 2.0);
+  double angleStep = (totalDrones > 1) ? (FAN_ANGLE / (totalDrones - 1)) : 0;
+ 
+  // 현재 드론에 할당된 방위각 (Degree)
+  double myBearing = startAngle + (angleStep * droneIndex);
+  double radBearing = deg2rad(myBearing);
+
+  // 위도/경도 1도당 미터 단위 환산 (대략적 계산)
+  double metersPerLat = 111000.0;
+  double metersPerLon = 111000.0 * cos(deg2rad(BASE_LAT));
+
+  // 거리와 각도를 반영한 오프셋 계산 (미터 -> 위경도)
+  double deltaLat = (SEARCH_RADIUS * cos(radBearing)) / metersPerLat;
+  double deltaLon = (SEARCH_RADIUS * sin(radBearing)) / metersPerLon;
+
+  targetLat = BASE_LAT + deltaLat;
+  targetLon = BASE_LON + deltaLon;
+
+  Serial.print("드론 "); Serial.print(droneIndex);
+  Serial.print(" 할당 방위각: "); Serial.print(myBearing); Serial.println("도");
+  Serial.print("목표 위도: "); Serial.println(targetLat, 6);
+  Serial.print("목표 경도: "); Serial.println(targetLon, 6);
+}
+
+void setup() {
+  Serial.begin(9600);
+  Serial.println("드론 산개 제어 시스템 준비 완료");
+}
+
+void loop() {
+  // 예시: 무전기나 통신으로 "FAN_OUT" 명령을 받았다고 가정
+  if (Serial.available()) {
+    String cmd = Serial.readStringUntil('\n');
+    cmd.trim();
+
+    if (cmd == "FAN_OUT") {
+      Serial.println("\n[명령 발생] 부채꼴 산개 비행을 시작합니다!");
+     
+      // 내 드론 ID 기반 부채꼴 목표 좌표 계산
+      calculateFanTarget(DRONE_ID, TOTAL_DRONES);
+     
+      // MAVLink 명령이나 FC 제어를 시작하여 (targetLat, targetLon)으로 이동
+      // flyToTarget(targetLat, targetLon);
+    }
+  }
+}
+
+// 기존 탐색 함수들
+void flyCirclePattern() {
+  // 원형 탐색 비행 제어 코드 작성
+}
+
+void flySectorPattern() {
+  // 부채꼴 탐색 비행 제어 코드 작성
+}
+
+void flyCustomWaypoints() {
+  // 커스텀 웨이포인트 비행 제어 코드 작성
+}
+
+// 신규 추가: 원형 산개 제어 함수 (3번 입력 시 실행)
+void flyCircularDispersion() {
+  // TODO: 4기 편대가 중심점에서 360도를 균등하게 나누어(예: 0°, 90°, 180°, 270°) 방사형으로 퍼져나가는 로직 구현
+}
+
+// 신규 추가: 부채꼴 산개 제어 함수 (4번 입력 시 실행)
+void flySectorDispersion() {
+  // TODO: 전방 특정 시야각 범위 내에서 부채꼴 모양으로 간격을 두고 펼쳐지는 로직 구현
